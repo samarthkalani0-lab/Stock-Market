@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock Portfolio Glasshouse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: dark;
+  --black: #000000;
+  --ink: #f4f6f8;
+  --ink-2: #b9c0c8;
+  --ink-3: #7d8690;
+  --own: #5cd6ff;        /* cyan: what you own (a stock's price, your portfolio) */
+  --yardstick: #ffb21f;  /* amber: what you measure it against (50-day average, Nifty 50) */
+  --gain: #3ddc84;
+  --loss: #ff5c72;
+  --glass: rgba(255, 255, 255, 0.055);
+  --glass-strong: rgba(255, 255, 255, 0.09);
+  --edge: rgba(255, 255, 255, 0.13);
+  --edge-bright: rgba(255, 255, 255, 0.28);
+  --grid: rgba(255, 255, 255, 0.07);
+  --display: "Bricolage Grotesque", "Segoe UI", sans-serif;
+  --body: "Geist", "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html { background: var(--black); }
+body {
+  margin: 0;
+  background: var(--black);
+  color: var(--ink);
+  font: 400 16px/1.55 var(--body);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* The light behind the glass: every stock's past year, drawn huge and blurred. */
+#lightfield {
+  position: fixed; inset: -10vh -10vw; width: 120vw; height: 120vh;
+  z-index: 0; pointer-events: none;
+  filter: blur(56px) saturate(150%);
+  opacity: 0.5;
+}
+main { position: relative; z-index: 1; max-width: 1240px; margin: 0 auto; padding-block: 0 64px; padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+
+.glass {
+  position: relative;
+  background: linear-gradient(160deg, var(--glass-strong), var(--glass) 40%, rgba(255,255,255,0.025));
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border: 1px solid var(--edge);
+  border-top-color: var(--edge-bright);
+  border-radius: 28px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 30px 80px -40px rgba(0,0,0,0.9);
+}
+
+/* Hero */
+.hero { padding: 88px 0 40px; max-width: 980px; }
+.hero h1 {
+  font-family: var(--display);
+  font-weight: 650;
+  font-variation-settings: "wdth" 82, "opsz" 96;
+  font-size: clamp(2.4rem, 6.2vw, 5.1rem);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  margin: 0 0 28px;
+  text-wrap: balance;
+}
+.hero p { font-size: 1.2rem; color: var(--ink-2); max-width: 62ch; margin: 0; text-wrap: pretty; }
+.hero p strong { color: var(--ink); font-weight: 600; }
+.hero p strong.up, .story p strong.up { color: var(--gain); }
+.hero p strong.down, .story p strong.down { color: var(--loss); }
+.facts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; padding: 0; list-style: none; }
+.facts li {
+  padding: 10px 16px; border-radius: 999px; font-size: 0.95rem; color: var(--ink-2);
+  background: var(--glass); border: 1px solid var(--edge);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+}
+.facts b { color: var(--ink); font-weight: 600; }
+
+section { margin-top: 28px; }
+.panel { padding: 28px 30px 30px; }
+.panel h2 {
+  font-family: var(--display);
+  font-variation-settings: "wdth" 90, "opsz" 36;
+  font-weight: 600; font-size: 1.65rem; letter-spacing: -0.02em; line-height: 1.15;
+  margin: 0 0 6px;
+}
+.panel .lede { color: var(--ink-2); margin: 0 0 20px; max-width: 70ch; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 18px; margin: 0 0 12px; padding: 0; list-style: none; font-size: 0.9rem; color: var(--ink-2); }
+.legend li { display: flex; align-items: center; gap: 8px; }
+.swatch { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
+.swatch.dash { background: repeating-linear-gradient(90deg, var(--ink-2) 0 4px, transparent 4px 7px); height: 2px; }
+
+/* Charts */
+.chart { position: relative; width: 100%; height: 340px; outline: none; border-radius: 14px; touch-action: pan-y; }
+.chart:focus-visible { box-shadow: 0 0 0 2px var(--own); }
+.chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.axis text { fill: var(--ink-3); font: 12px var(--body); font-variant-numeric: tabular-nums; }
+.tip {
+  position: absolute; top: 0; left: 0; pointer-events: none; z-index: 3;
+  min-width: 170px; padding: 10px 12px; border-radius: 12px;
+  background: rgba(10, 12, 16, 0.78); border: 1px solid var(--edge-bright);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  font-size: 0.85rem; line-height: 1.45; opacity: 0; transition: opacity .12s;
+  font-variant-numeric: tabular-nums;
+}
+.tip.on { opacity: 1; }
+.tip .d { color: var(--ink-3); margin-bottom: 4px; }
+.tip .r { display: flex; justify-content: space-between; gap: 14px; }
+.tip .r span:first-child { display: flex; align-items: center; gap: 6px; color: var(--ink-2); }
+.tip .k { width: 8px; height: 8px; border-radius: 50%; }
+
+/* Explorer */
+.explorer { display: grid; grid-template-columns: 280px 1fr; gap: 0; padding: 0; overflow: hidden; }
+.picker { border-right: 1px solid var(--edge); padding: 22px 12px; display: flex; flex-direction: column; gap: 2px; }
+.picker h2 { padding: 0 12px; margin-bottom: 10px; }
+.pick {
+  all: unset; cursor: pointer; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px;
+  padding: 10px 12px; border-radius: 14px; border: 1px solid transparent;
+}
+.pick:hover { background: rgba(255,255,255,0.05); }
+.pick:focus-visible { border-color: var(--own); }
+.pick[aria-pressed="true"] { background: rgba(92, 214, 255, 0.11); border-color: rgba(92, 214, 255, 0.45); }
+.pick .n { font-weight: 500; font-size: 0.95rem; }
+.pick .t { grid-column: 1; font-size: 0.78rem; color: var(--ink-3); }
+.pick .v { grid-row: 1 / span 2; grid-column: 2; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 0.95rem; }
+.up { color: var(--gain); }
+.down { color: var(--loss); }
+
+.stage { padding: 26px 30px 30px; min-width: 0; }
+.stage-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 14px; }
+.stage-head h3 {
+  font-family: var(--display); font-variation-settings: "wdth" 85, "opsz" 60;
+  font-weight: 650; font-size: 2.3rem; letter-spacing: -0.03em; line-height: 1; margin: 0;
+}
+.stage-head .price { color: var(--ink-2); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: rgba(255,255,255,0.05); border: 1px solid var(--edge); }
+.seg button, .toggle {
+  all: unset; cursor: pointer; padding: 6px 14px; border-radius: 999px; font-size: 0.87rem; color: var(--ink-2);
+}
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--black); font-weight: 600; }
+.seg button:focus-visible, .toggle:focus-visible { outline: 2px solid var(--own); outline-offset: 2px; }
+.toggle { border: 1px solid var(--edge); display: inline-flex; align-items: center; gap: 8px; }
+.toggle[aria-pressed="true"] { border-color: rgba(255, 178, 31, 0.6); color: var(--ink); }
+.toggle .swatch { background: var(--yardstick); }
+.toggle[aria-pressed="false"] .swatch { background: var(--ink-3); }
+
+.reading { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--edge); }
+.verdict { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 10px; border-radius: 999px; font-weight: 600; font-size: 0.9rem; margin-bottom: 12px; }
+.verdict.up { background: rgba(61, 220, 132, 0.12); border: 1px solid rgba(61, 220, 132, 0.4); }
+.verdict.down { background: rgba(255, 92, 114, 0.12); border: 1px solid rgba(255, 92, 114, 0.4); }
+.verdict.mixed { color: var(--yardstick); background: rgba(255, 178, 31, 0.1); border: 1px solid rgba(255, 178, 31, 0.4); }
+.story p { margin: 0 0 10px; color: var(--ink-2); max-width: 60ch; }
+.story p strong { color: var(--ink); font-weight: 600; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; }
+.stats div { padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--edge); }
+.stats dt { font-size: 0.8rem; color: var(--ink-3); }
+.stats dd { margin: 2px 0 0; font-weight: 600; font-size: 1.08rem; font-variant-numeric: tabular-nums; }
+
+/* Scoreboard + trend strip */
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.bars { display: grid; gap: 4px; }
+.bar-row {
+  all: unset; cursor: pointer; display: grid; grid-template-columns: 150px 1fr 56px; align-items: center; gap: 12px;
+  padding: 5px 6px; border-radius: 10px; font-size: 0.9rem;
+}
+.bar-row:hover, .bar-row:focus-visible { background: rgba(255,255,255,0.05); }
+.bar-row:focus-visible { outline: 2px solid var(--own); }
+.bar-row .n { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { position: relative; height: 22px; }
+.bar-track .zero { position: absolute; top: -3px; bottom: -3px; width: 1px; background: rgba(255,255,255,0.3); }
+.bar-track .bench { position: absolute; top: -5px; bottom: -5px; width: 0; border-left: 2px dashed var(--yardstick); }
+.bar { position: absolute; top: 3px; height: 16px; }
+.bar.up { background: var(--gain); border-radius: 0 4px 4px 0; }
+.bar.down { background: var(--loss); border-radius: 4px 0 0 4px; }
+.bar-val { text-align: right; font-size: 0.85rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.strip-row { display: grid; grid-template-columns: 150px 1fr 64px; align-items: center; gap: 12px; padding: 5px 6px; font-size: 0.9rem; }
+.strip-row .n { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip-row .c { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 0.82rem; }
+.cells { display: flex; gap: 2px; height: 20px; }
+.cells i { flex: 1; border-radius: 2px; background: rgba(255, 92, 114, 0.55); }
+.cells i.a { background: var(--gain); }
+.strip-key { display: flex; gap: 18px; font-size: 0.85rem; color: var(--ink-2); margin: 0 0 12px; padding: 0; list-style: none; }
+.strip-key li { display: flex; align-items: center; gap: 7px; }
+.strip-key i { width: 12px; height: 12px; border-radius: 3px; background: var(--gain); }
+.strip-key i.b { background: rgba(255, 92, 114, 0.55); }
+
+details { margin-top: 22px; border-top: 1px solid var(--edge); padding-top: 14px; }
+summary { cursor: pointer; color: var(--ink-2); font-size: 0.92rem; width: fit-content; }
+summary:focus-visible { outline: 2px solid var(--own); outline-offset: 3px; border-radius: 4px; }
+.table-wrap { overflow-x: auto; margin-top: 14px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--ink-3); font-weight: 500; }
+
+.guide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+.guide h3 { font-family: var(--display); font-variation-settings: "wdth" 90; font-weight: 600; font-size: 1.15rem; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+.guide p { margin: 0; color: var(--ink-2); font-size: 0.95rem; }
+footer { margin-top: 40px; color: var(--ink-3); font-size: 0.85rem; max-width: 80ch; }
+
+@media (max-width: 960px) {
+  .explorer { grid-template-columns: 1fr; }
+  .picker { border-right: 0; border-bottom: 1px solid var(--edge); flex-direction: row; overflow-x: auto; padding: 16px 12px; gap: 6px; scrollbar-width: thin; }
+  .picker h2 { display: none; }
+  .pick { flex: 0 0 auto; border-color: var(--edge); }
+  .reading, .duo, .guide { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  main { padding-block: 0 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .hero { padding-top: 56px; }
+  .hero p { font-size: 1.05rem; }
+  .panel, .stage { padding: 22px 18px 22px; }
+  .chart { height: 270px; }
+  .stage-head h3 { font-size: 1.8rem; }
+  .bar-row { grid-template-columns: 104px 1fr 50px; gap: 8px; }
+  .strip-row { grid-template-columns: 104px 1fr; }
+  .strip-row .c { display: none; }
+  .stats { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+@keyframes draw { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: 0; } }
+.panel.compact { padding: 18px 30px; }
+.panel.compact details { margin: 0; border: 0; padding: 0; }
+</style>
+</head>
+<body>
+<svg id="lightfield" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true"></svg>
+
+<main>
+  <header class="hero">
+    <h1 id="headline">Loading your portfolio…</h1>
+    <p id="subline"></p>
+    <ul class="facts" id="facts"></ul>
+  </header>
+
+  <section class="glass panel" aria-labelledby="vs-title">
+    <h2 id="vs-title">Your portfolio against the market</h2>
+    <p class="lede">What your ₹1,00,000 has been worth each trading day since you bought, next to the same money put into the Nifty 50. Hover or use the arrow keys to read any day.</p>
+    <ul class="legend">
+      <li><span class="swatch" style="background:var(--own)"></span>Your portfolio</li>
+      <li><span class="swatch" style="background:var(--yardstick)"></span>Same money in the Nifty 50</li>
+      <li><span class="swatch dash"></span>₹1,00,000 you started with</li>
+    </ul>
+    <div class="chart" id="vs-chart" tabindex="0" role="img" aria-label="Line chart of portfolio value against the Nifty 50"></div>
+  </section>
+
+  <section class="glass explorer" aria-label="Stock explorer">
+    <nav class="picker" aria-label="Choose a stock">
+      <h2>Pick a stock</h2>
+      <div id="picks" style="display:contents"></div>
+    </nav>
+    <div class="stage">
+      <div class="stage-head">
+        <div>
+          <h3 id="s-name"></h3>
+          <div class="price" id="s-price"></div>
+        </div>
+        <div class="controls">
+          <div class="seg" role="group" aria-label="Time range" id="range">
+            <button type="button" data-m="3" aria-pressed="false">3 months</button>
+            <button type="button" data-m="6" aria-pressed="false">6 months</button>
+            <button type="button" data-m="12" aria-pressed="true">1 year</button>
+          </div>
+          <button type="button" class="toggle" id="ma-toggle" aria-pressed="true"><span class="swatch"></span>50-day average</button>
+        </div>
+      </div>
+      <ul class="legend">
+        <li><span class="swatch" style="background:var(--own)"></span>Daily closing price</li>
+        <li><span class="swatch" style="background:var(--yardstick)"></span>50-day moving average</li>
+        <li><span class="swatch dash"></span>The day you bought</li>
+      </ul>
+      <div class="chart" id="stock-chart" tabindex="0" role="img"></div>
+      <div class="reading">
+        <div class="story" id="story" aria-live="polite"></div>
+        <dl class="stats" id="stats"></dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="glass panel duo">
+    <div>
+      <h2>Winners and losers</h2>
+      <p class="lede">Change in each stock's price since you bought it. The dashed amber line is the Nifty 50. Anything to its right beat the market. Click a bar to open that stock.</p>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div>
+      <h2>Above or below the trend, day by day</h2>
+      <p class="lede">One square for every trading day since you bought. Green means the price closed above its 50-day average that day.</p>
+      <ul class="strip-key"><li><i></i>Above the average</li><li><i class="b"></i>Below the average</li></ul>
+      <div id="strips"></div>
+    </div>
+  </section>
+
+  <section class="glass panel compact">
+    <details>
+      <summary>See every number as a table</summary>
+      <div class="table-wrap"><table id="table"></table></div>
+    </details>
+  </section>
+
+  <section class="glass panel" aria-labelledby="guide-title">
+    <h2 id="guide-title">How to read these charts</h2>
+    <p class="lede">Three ideas are enough to read everything on this page.</p>
+    <div class="guide">
+      <div><h3><span class="swatch" style="background:var(--own)"></span>The price</h3><p>The cyan line is what one share closed at each day. On its own it jumps around a lot, which makes the direction hard to see.</p></div>
+      <div><h3><span class="swatch" style="background:var(--yardstick)"></span>The 50-day average</h3><p>The amber line averages the last 50 closing prices. It moves slowly, so it shows the trend. If it's sloping up, the stock has been climbing for weeks.</p></div>
+      <div><h3><span class="swatch" style="background:linear-gradient(90deg,var(--gain),var(--loss))"></span>Above or below</h3><p>A price above its average usually means buyers are in control right now. Below it usually means the opposite. It describes the past and doesn't predict the future.</p></div>
+    </div>
+  </section>
+
+  <footer id="footer"></footer>
+</main>
+
+<script src="data.js"></script>
+<script>
+(() => {
+  const D = window.PORTFOLIO_DATA;
+  if (!D) {
+    document.getElementById("headline").textContent = "No data found";
+    document.getElementById("subline").textContent = "Run python build_dashboard.py in the stock-charter folder, then reload this page.";
+    return;
+  }
+  const NS = "http://www.w3.org/2000/svg";
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const C = { own: css("--own"), yard: css("--yardstick"), gain: css("--gain"), loss: css("--loss"), ink: css("--ink"), ink3: css("--ink-3"), grid: css("--grid") };
+  const inr = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+  const inr2 = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const rupees = v => "₹" + inr.format(v);
+  const money = (v, cur) => cur === "USD" ? "$" + inr2.format(v) : cur === "points" ? inr2.format(v) : "₹" + inr2.format(v);
+  const pct = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1) + "%";
+  const pts = v => Math.abs(v).toFixed(1) + " points";
+  const cls = v => v >= 0 ? "up" : "down";
+  const parse = s => new Date(s + "T00:00:00");
+  const longDate = s => parse(s).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+  const shortDate = s => parse(s).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  const el = (tag, attrs = {}, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+
+  const stocks = D.stocks;
+  const all = [...stocks, D.nifty];
+  const P = D.portfolio;
+  const now = P[P.length - 1];
+  const value = now[1], niftyValue = now[2];
+  const portPct = (value / D.startingCapital - 1) * 100;
+  const niftyPct = (niftyValue / D.startingCapital - 1) * 100;
+  const sorted = [...stocks].sort((a, b) => b.returnPct - a.returnPct);
+  const upCount = stocks.filter(s => s.returnPct > 0).length;
+
+  // ---------- Light field behind the glass ----------
+  (function lightfield() {
+    const svg = document.getElementById("lightfield");
+    const colors = [C.own, null, C.yard, null, "#ff4fb8", null, C.own, null, "#7b6cff", null, C.yard];
+    stocks.forEach((s, i) => {
+      if (!colors[i]) return;   // every other stock stays dark, so black dominates
+      const vals = s.series.map(r => r[1]);
+      const lo = Math.min(...vals), hi = Math.max(...vals);
+      const band = 600 / stocks.length;
+      const d = vals.map((v, j) => `${(j / (vals.length - 1)) * 1000},${i * band + band * 1.5 - ((v - lo) / (hi - lo || 1)) * band * 2.2}`).join(" ");
+      el("polyline", { points: d, fill: "none", stroke: colors[i], "stroke-width": 16, "stroke-linecap": "round", "stroke-linejoin": "round", opacity: 0.85 }, svg);
+    });
+  })();
+
+  // ---------- Hero ----------
+  document.getElementById("headline").textContent =
+    `${rupees(D.startingCapital)} went into ${stocks.length} stocks on ${shortDate(D.buyDate)}. Today it's worth ${rupees(value)}.`;
+  const beat = portPct - niftyPct;
+  document.getElementById("subline").innerHTML =
+    `That's <strong class="${cls(portPct)}">${pct(portPct)}</strong> in ${P.length} trading days. The same money in the Nifty 50 would be ` +
+    `<strong class="${cls(niftyPct)}">${pct(niftyPct)}</strong>, so your picks ${beat >= 0 ? "beat" : "trailed"} the market by <strong>${pts(beat)}</strong>.`;
+  const best = sorted[0], worst = sorted[sorted.length - 1];
+  const aboveNow = stocks.filter(s => s.gapPct > 0).length;
+  document.getElementById("facts").innerHTML = [
+    `<b>${upCount} of ${stocks.length}</b> stocks are up`,
+    `Best: <b>${best.name}</b> <span class="up">${pct(best.returnPct)}</span>`,
+    `Worst: <b>${worst.name}</b> <span class="down">${pct(worst.returnPct)}</span>`,
+    `<b>${aboveNow}</b> trading above their 50-day average`,
+  ].map(t => `<li>${t}</li>`).join("");
+
+  // ---------- Reusable line chart ----------
+  // opts: dates[], lines[{name, color, values[], width, fmt}], refY, markerDate, yFmt, onDraw
+  function lineChart(host, opts) {
+    host.innerHTML = "";
+    const tip = document.createElement("div");
+    tip.className = "tip";
+    host.appendChild(tip);
+    const svg = el("svg", {}, host);
+    let idx = null, geom = null;
+
+    function draw(animate) {
+      svg.innerHTML = "";
+      const W = host.clientWidth, H = host.clientHeight;
+      const m = { t: 12, r: W < 500 ? 12 : 92, b: 28, l: W < 500 ? 46 : 64 };
+      const iw = W - m.l - m.r, ih = H - m.t - m.b;
+      svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+      const n = opts.dates.length;
+      const vals = opts.lines.flatMap(l => l.values).filter(v => v != null);
+      if (opts.refY != null) vals.push(opts.refY);
+      let lo = Math.min(...vals), hi = Math.max(...vals);
+      const pad = (hi - lo) * 0.08 || 1; lo -= pad; hi += pad;
+      const step = niceStep((hi - lo) / 4);
+      const x = i => m.l + (n === 1 ? 0 : (i / (n - 1)) * iw);
+      const y = v => m.t + (1 - (v - lo) / (hi - lo)) * ih;
+      geom = { x, y, m, iw, ih, W, H, n };
+
+      const axis = el("g", { class: "axis" }, svg);
+      for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+        el("line", { x1: m.l, x2: m.l + iw, y1: y(v), y2: y(v), stroke: C.grid }, axis);
+        const t = el("text", { x: m.l - 10, y: y(v) + 4, "text-anchor": "end" }, axis);
+        t.textContent = opts.yFmt(v);
+      }
+      // Month ticks along the bottom
+      let lastMonth = null, lastX = -999;
+      opts.dates.forEach((d, i) => {
+        const mo = d.slice(0, 7);
+        if (mo !== lastMonth) {
+          lastMonth = mo;
+          if (x(i) - lastX > (W < 500 ? 54 : 70) && x(i) < m.l + iw - 20) {
+            const t = el("text", { x: x(i), y: H - 6, "text-anchor": "start" }, axis);
+            t.textContent = parse(d).toLocaleDateString("en-IN", { month: "short", ...(mo.endsWith("-01") || i === 0 ? { year: "numeric" } : {}) });
+            lastX = x(i);
+          }
+        }
+      });
+
+      if (opts.refY != null) {
+        el("line", { x1: m.l, x2: m.l + iw, y1: y(opts.refY), y2: y(opts.refY), stroke: C.ink3, "stroke-dasharray": "4 4" }, svg);
+      }
+      const mi = opts.dates.findIndex(d => d >= opts.markerDate);
+      if (mi > 0) {
+        el("line", { x1: x(mi), x2: x(mi), y1: m.t, y2: m.t + ih, stroke: C.ink3, "stroke-dasharray": "4 4" }, svg);
+        const t = el("text", { x: x(mi) + 6, y: m.t + 12, fill: C.ink3, "font-size": 12, "font-family": "Geist, sans-serif" }, svg);
+        t.textContent = "You bought";
+      }
+
+      opts.lines.forEach(l => {
+        let d = "", pen = false;
+        l.values.forEach((v, i) => {
+          if (v == null) { pen = false; return; }
+          d += (pen ? "L" : "M") + x(i).toFixed(1) + "," + y(v).toFixed(1);
+          pen = true;
+        });
+        const path = el("path", { d, fill: "none", stroke: l.color, "stroke-width": l.width || 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+        if (animate && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          const len = path.getTotalLength();
+          path.style.strokeDasharray = len;
+          path.style.setProperty("--len", len);
+          path.style.animation = "draw 1.4s cubic-bezier(.3,.7,.2,1) both";
+        }
+        // Direct label at the right end (wide screens only)
+        let last = l.values.length - 1;
+        while (last >= 0 && l.values[last] == null) last--;
+        if (W >= 500 && last >= 0 && l.label) {
+          el("circle", { cx: x(last), cy: y(l.values[last]), r: 4, fill: l.color, stroke: "#000", "stroke-width": 2 }, svg);
+          const t = el("text", { x: x(last) + 10, y: y(l.values[last]) + 4 + (l.labelNudge || 0), fill: C.ink, "font-size": 12, "font-weight": 600, "font-family": "Geist, sans-serif" }, svg);
+          t.textContent = l.label;
+        }
+      });
+
+      const cross = el("g", { opacity: idx == null ? 0 : 1 }, svg);
+      el("line", { y1: m.t, y2: m.t + ih, stroke: "rgba(255,255,255,0.35)" }, cross);
+      opts.lines.forEach(l => el("circle", { r: 5, fill: l.color, stroke: "#000", "stroke-width": 2 }, cross));
+      geom.cross = cross;
+      if (idx != null) show(idx);
+    }
+
+    function show(i) {
+      idx = Math.max(0, Math.min(geom.n - 1, i));
+      const { x, y, cross, m, iw } = geom;
+      cross.setAttribute("opacity", 1);
+      const [line, ...dots] = cross.children;
+      line.setAttribute("x1", x(idx)); line.setAttribute("x2", x(idx));
+      opts.lines.forEach((l, k) => {
+        const v = l.values[idx];
+        dots[k].setAttribute("opacity", v == null ? 0 : 1);
+        if (v != null) { dots[k].setAttribute("cx", x(idx)); dots[k].setAttribute("cy", y(v)); }
+      });
+      tip.innerHTML = `<div class="d">${longDate(opts.dates[idx])}</div>` +
+        opts.lines.map(l => l.values[idx] == null ? "" :
+          `<div class="r"><span><i class="k" style="background:${l.color}"></i>${l.name}</span><b>${l.fmt(l.values[idx])}</b></div>`).join("") +
+        (opts.extra ? opts.extra(idx) : "");
+      tip.classList.add("on");
+      const tw = tip.offsetWidth;
+      const left = x(idx) + 16 + tw > m.l + iw + m.r ? x(idx) - 16 - tw : x(idx) + 16;
+      tip.style.transform = `translate(${Math.max(0, left)}px, ${m.t + 6}px)`;
+    }
+    function hide() { idx = null; tip.classList.remove("on"); geom.cross.setAttribute("opacity", 0); }
+    function fromPointer(e) {
+      const r = svg.getBoundingClientRect();
+      const px = e.clientX - r.left;
+      show(Math.round(((px - geom.m.l) / geom.iw) * (geom.n - 1)));
+    }
+    svg.addEventListener("pointermove", fromPointer);
+    svg.addEventListener("pointerdown", fromPointer);
+    svg.addEventListener("pointerleave", hide);
+    host.onkeydown = e => {
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        show((idx ?? geom.n - 1) + (e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? 10 : 1));
+      } else if (e.key === "Escape") hide();
+    };
+    host.onblur = hide;
+    new ResizeObserver(() => draw(false)).observe(host);
+    draw(true);
+  }
+  function niceStep(raw) {
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const f = raw / p;
+    return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p;
+  }
+
+  // ---------- Portfolio vs Nifty ----------
+  lineChart(document.getElementById("vs-chart"), {
+    dates: P.map(r => r[0]),
+    lines: [
+      { name: "Your portfolio", color: C.own, values: P.map(r => r[1]), width: 2.5, fmt: rupees, label: "You " + pct(portPct), labelNudge: portPct > niftyPct ? -4 : 4 },
+      { name: "Nifty 50", color: C.yard, values: P.map(r => r[2]), width: 2, fmt: rupees, label: "Nifty " + pct(niftyPct), labelNudge: portPct > niftyPct ? 4 : -4 },
+    ],
+    refY: D.startingCapital,
+    markerDate: "",
+    yFmt: v => "₹" + (v / 1000).toFixed(0) + "k",
+    extra: i => {
+      const g = P[i][1] - P[i][2];
+      return `<div class="r" style="margin-top:4px"><span>${g >= 0 ? "You're ahead by" : "You're behind by"}</span><b class="${cls(g)}">${rupees(Math.abs(g))}</b></div>`;
+    },
+  });
+
+  // ---------- Stock explorer ----------
+  let current = stocks[0], months = 12, showMA = true;
+  const picks = document.getElementById("picks");
+  all.forEach(s => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "pick"; b.dataset.t = s.ticker;
+    b.setAttribute("aria-pressed", s === current);
+    b.innerHTML = `<span class="n">${s.name}</span><span class="t">${s.ticker === "^NSEI" ? "Market index" : s.ticker.replace(".NS", "")}</span><span class="v ${cls(s.returnPct)}">${pct(s.returnPct)}</span>`;
+    b.onclick = () => select(s);
+    picks.appendChild(b);
+  });
+  document.querySelectorAll("#range button").forEach(b => b.onclick = () => {
+    months = +b.dataset.m;
+    document.querySelectorAll("#range button").forEach(o => o.setAttribute("aria-pressed", o === b));
+    renderStock();
+  });
+  const maBtn = document.getElementById("ma-toggle");
+  maBtn.onclick = () => { showMA = !showMA; maBtn.setAttribute("aria-pressed", showMA); renderStock(); };
+
+  function select(s) {
+    current = s;
+    document.querySelectorAll(".pick").forEach(b => b.setAttribute("aria-pressed", b.dataset.t === s.ticker));
+    renderStock();
+  }
+
+  function renderStock() {
+    const s = current;
+    const cutoff = new Date(parse(s.series[s.series.length - 1][0]));
+    cutoff.setMonth(cutoff.getMonth() - months);
+    const rows = s.series.filter(r => parse(r[0]) >= cutoff);
+    const fmt = v => money(v, s.currency);
+    document.getElementById("s-name").textContent = s.name;
+    document.getElementById("s-price").innerHTML =
+      `${fmt(s.last)} <span class="${cls(s.returnPct)}">${pct(s.returnPct)}</span> since you bought` +
+      (s.currency === "USD" ? " · priced in US dollars" : "");
+    const host = document.getElementById("stock-chart");
+    host.setAttribute("aria-label", `${s.name} daily closing price${showMA ? " and 50-day moving average" : ""}`);
+    const lines = [{ name: "Close", color: C.own, values: rows.map(r => r[1]), width: 1.8, fmt, label: "Price" }];
+    if (showMA) lines.push({ name: "50-day avg", color: C.yard, values: rows.map(r => r[2]), width: 2.5, fmt, label: "Average", labelNudge: s.gapPct > 0 ? 10 : -10 });
+    lines[0].labelNudge = showMA ? (s.gapPct > 0 ? -6 : 6) : 0;
+    lineChart(host, {
+      dates: rows.map(r => r[0]), lines, markerDate: D.buyDate, yFmt: v => s.currency === "USD" ? "$" + inr.format(v) : inr.format(v),
+      extra: i => rows[i][2] == null ? "" : `<div class="r"><span>Gap to average</span><b class="${cls(rows[i][1] - rows[i][2])}">${pct((rows[i][1] / rows[i][2] - 1) * 100)}</b></div>`,
+    });
+    renderReading(s);
+  }
+
+  function renderReading(s) {
+    const fmt = v => money(v, s.currency);
+    const rising = s.maSlopePct > 1, falling = s.maSlopePct < -1;
+    let verdict, vcls;
+    if (s.gapPct > 0 && !falling) { verdict = "Uptrend"; vcls = "up"; }
+    else if (s.gapPct < 0 && !rising) { verdict = "Downtrend"; vcls = "down"; }
+    else { verdict = "Mixed signals"; vcls = "mixed"; }
+    const days = s.aboveSinceBuy.length, above = s.aboveSinceBuy.filter(Boolean).length;
+    const isIndex = s.ticker === "^NSEI";
+    const vsMarket = s.returnPct - D.nifty.returnPct;
+    const slopeWord = rising ? "rising" : falling ? "falling" : "flat";
+
+    const ps = [];
+    ps.push(isIndex
+      ? `The Nifty 50 opened at <strong>${fmt(s.buyPrice)}</strong> on the day you bought and is now <strong>${fmt(s.last)}</strong>, <strong class="${cls(s.returnPct)}">${pct(s.returnPct)}</strong>. It's the yardstick for every stock in your portfolio.`
+      : `You bought at <strong>${fmt(s.buyPrice)}</strong> and it now trades at <strong>${fmt(s.last)}</strong>, which is <strong class="${cls(s.returnPct)}">${pct(s.returnPct)}</strong>. That ${vsMarket >= 0 ? "beats" : "trails"} the Nifty 50 by <strong>${pts(vsMarket)}</strong>.`);
+    ps.push(`The price is <strong>${Math.abs(s.gapPct).toFixed(1)}% ${s.gapPct >= 0 ? "above" : "below"}</strong> its 50-day average, and that average is <strong>${slopeWord}</strong> (${pct(s.maSlopePct)} over the last 20 trading days).` +
+      (s.lastCross ? ` It last crossed ${s.lastCross.up ? "above" : "below"} the average on ${longDate(s.lastCross.date)}.` : ""));
+    ps.push(verdict === "Uptrend" ? "In plain words, the stock has been climbing and buyers are still in charge."
+      : verdict === "Downtrend" ? "In plain words, the stock has been sliding and hasn't yet shown signs of turning around."
+      : "In plain words, the short-term move and the longer trend disagree, so the direction isn't settled yet.");
+    document.getElementById("story").innerHTML =
+      `<div class="verdict ${vcls}">${vcls === "up" ? "▲" : vcls === "down" ? "▼" : "◆"} ${verdict}</div>` + ps.map(p => `<p>${p}</p>`).join("");
+
+    const stat = (k, v) => `<div><dt>${k}</dt><dd>${v}</dd></div>`;
+    document.getElementById("stats").innerHTML = [
+      stat("Days above its average", `${above} of ${days}`),
+      stat("Typical daily move", `±${s.dailyMovePct.toFixed(1)}%`),
+      stat("Highest since buying", fmt(s.highSinceBuy)),
+      stat("Lowest since buying", fmt(s.lowSinceBuy)),
+      stat("Biggest fall from a peak", `<span class="down">${pct(s.drawdownPct)}</span>`),
+      isIndex ? stat("Market index", "Nifty 50") : stat("Shares held", s.shares < 1 ? s.shares.toFixed(4) : s.shares),
+    ].join("");
+  }
+
+  // ---------- Winners and losers ----------
+  (function bars() {
+    const host = document.getElementById("bars");
+    const vals = [...stocks.map(s => s.returnPct), D.nifty.returnPct];
+    const lo = Math.min(0, ...vals) * 1.08, hi = Math.max(0, ...vals) * 1.08;
+    const pos = v => ((v - lo) / (hi - lo)) * 100;
+    sorted.forEach(s => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "bar-row";
+      b.setAttribute("aria-label", `${s.name} ${pct(s.returnPct)}. Open in explorer.`);
+      const z = pos(0), p = pos(s.returnPct);
+      const left = Math.min(z, p), width = Math.abs(p - z);
+      b.innerHTML = `<span class="n">${s.name}</span><span class="bar-track">` +
+        `<span class="bar ${cls(s.returnPct)}" style="left:${left}%;width:${width}%"></span>` +
+        `<span class="zero" style="left:${z}%"></span><span class="bench" style="left:${pos(D.nifty.returnPct)}%"></span>` +
+        `</span><span class="bar-val ${cls(s.returnPct)}">${pct(s.returnPct)}</span>`;
+      b.onclick = () => { select(s); document.querySelector(".explorer").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); };
+      host.appendChild(b);
+    });
+    const note = document.createElement("p");
+    note.style.cssText = "margin:12px 6px 0;font-size:.85rem;color:var(--ink-3)";
+    note.innerHTML = `Nifty 50: <span class="${cls(D.nifty.returnPct)}">${pct(D.nifty.returnPct)}</span>. ${stocks.filter(s => s.returnPct > D.nifty.returnPct).length} of ${stocks.length} stocks did better than the market.`;
+    host.appendChild(note);
+  })();
+
+  // ---------- Trend strip ----------
+  (function strips() {
+    const host = document.getElementById("strips");
+    const firstDay = P[0][0];
+    [...stocks].sort((a, b) => b.aboveSinceBuy.filter(Boolean).length - a.aboveSinceBuy.filter(Boolean).length).forEach(s => {
+      const a = s.aboveSinceBuy.filter(Boolean).length;
+      const row = document.createElement("div");
+      row.className = "strip-row";
+      row.innerHTML = `<span class="n">${s.name}</span><span class="cells" role="img" aria-label="${s.name}: above its average on ${a} of ${s.aboveSinceBuy.length} days">` +
+        s.aboveSinceBuy.map(v => `<i class="${v ? "a" : ""}"></i>`).join("") + `</span><span class="c">${a}/${s.aboveSinceBuy.length}</span>`;
+      host.appendChild(row);
+    });
+    const note = document.createElement("p");
+    note.style.cssText = "margin:12px 6px 0;font-size:.85rem;color:var(--ink-3)";
+    note.textContent = `From ${longDate(firstDay)} (left) to ${longDate(P[P.length - 1][0])} (right).`;
+    host.appendChild(note);
+  })();
+
+  // ---------- Table ----------
+  document.getElementById("table").innerHTML =
+    `<thead><tr><th>Stock</th><th>Bought at</th><th>Now</th><th>Change</th><th>50-day average</th><th>Gap to average</th><th>Days above average</th><th>Biggest fall from a peak</th></tr></thead><tbody>` +
+    all.map(s => `<tr><td>${s.name}</td><td>${money(s.buyPrice, s.currency)}</td><td>${money(s.last, s.currency)}</td>` +
+      `<td class="${cls(s.returnPct)}">${pct(s.returnPct)}</td><td>${money(s.ma, s.currency)}</td><td class="${cls(s.gapPct)}">${pct(s.gapPct)}</td>` +
+      `<td>${s.aboveSinceBuy.filter(Boolean).length} of ${s.aboveSinceBuy.length}</td><td>${pct(s.drawdownPct)}</td></tr>`).join("") + "</tbody>";
+
+  document.getElementById("footer").textContent =
+    `Prices from Yahoo Finance, updated ${longDate(D.generated)}. Apple is priced in US dollars on its own chart and converted to rupees with each day's exchange rate for the portfolio total. ` +
+    `₹${inr.format(D.cash)} was left as cash. This is a school project for learning about markets, not investment advice.`;
+
+  renderStock();
+})();
+</script>
+</body>
+</html>
